@@ -47,23 +47,27 @@ function setStatus(text) {
 
 async function startCamera() {
   if (stream) stopStream();
-  const constraints = {
-    audio: false,
-    video: {
-      facingMode: { ideal: facingMode },
-      width: { ideal: 1280 },
-      height: { ideal: 720 },
-    },
-  };
-  stream = await navigator.mediaDevices.getUserMedia(constraints);
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({
+      audio: false,
+      video: {
+        facingMode: { ideal: facingMode },
+        width: { ideal: 1280 },
+        height: { ideal: 720 },
+      },
+    });
+  } catch (e) {
+    // 해상도/카메라 지정이 안 먹는 기기 → 가장 단순한 요청으로 재시도
+    stream = await navigator.mediaDevices.getUserMedia({ audio: false, video: true });
+  }
   video.srcObject = stream;
   await video.play();
   await new Promise((res) => {
     if (video.videoWidth) return res();
     video.onloadedmetadata = () => res();
   });
-  overlay.width = video.videoWidth;
-  overlay.height = video.videoHeight;
+  overlay.width = video.videoWidth || 640;
+  overlay.height = video.videoHeight || 480;
 }
 
 function stopStream() {
@@ -73,19 +77,53 @@ function stopStream() {
   }
 }
 
+function withTimeout(promise, ms, label) {
+  return Promise.race([
+    promise,
+    new Promise((_, reject) =>
+      setTimeout(() => reject(new Error("TIMEOUT:" + label)), ms)
+    ),
+  ]);
+}
+
+function setStartMsg(text) {
+  startErr.hidden = !text;
+  startErr.style.color = "#9aa7b8";
+  startErr.textContent = text || "";
+}
+
 async function begin() {
   startErr.hidden = true;
   startBtn.disabled = true;
   startSpinner.hidden = false;
 
+  // 인앱 브라우저(카카오톡/인스타 등) 경고
+  const ua = navigator.userAgent || "";
+  if (/KAKAOTALK|Instagram|FBAN|FBAV|Line\//i.test(ua)) {
+    setStartMsg("⚠️ 카카오톡/인스타 등 앱 안의 브라우저에서는 카메라가 막힐 수 있어요. Chrome 또는 삼성인터넷으로 열어 주세요.");
+  }
+
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    fail(new Error("NO_GETUSERMEDIA"));
+    return;
+  }
+
   try {
-    setStatus("AI 모델 불러오는 중…");
+    setStatus("AI 모델 불러오는 중… (최초 1회, 최대 30초)");
+    setStartMsg("AI 모델을 내려받는 중입니다…");
+    if (typeof cocoSsd === "undefined" || typeof tf === "undefined") {
+      throw new Error("SCRIPT_LOAD");
+    }
     if (!model) {
-      // lite_mobilenet_v2: 가장 가벼운 모델 (휴대폰에서 빠름)
-      model = await cocoSsd.load({ base: "lite_mobilenet_v2" });
+      model = await withTimeout(
+        cocoSsd.load({ base: "lite_mobilenet_v2" }),
+        30000,
+        "model"
+      );
     }
 
     setStatus("카메라 켜는 중…");
+    setStartMsg("카메라 권한을 허용해 주세요…");
     await startCamera();
 
     startScreen.hidden = true;
@@ -94,24 +132,39 @@ async function begin() {
     setStatus(null);
     loop();
   } catch (err) {
-    console.error(err);
-    startSpinner.hidden = true;
-    startBtn.disabled = false;
-    startErr.hidden = false;
-    startErr.textContent = errMessage(err);
-    setStatus(null);
+    fail(err);
   }
+}
+
+function fail(err) {
+  console.error(err);
+  startSpinner.hidden = true;
+  startBtn.disabled = false;
+  startBtn.textContent = "다시 시도";
+  startErr.hidden = false;
+  startErr.style.color = "#ff6b6b";
+  startErr.textContent = errMessage(err);
+  setStatus(null);
 }
 
 function errMessage(err) {
   const n = err && err.name;
+  const m = (err && err.message) || "";
+  if (m === "NO_GETUSERMEDIA")
+    return "이 브라우저에서는 카메라를 쓸 수 없습니다. Chrome 또는 삼성인터넷으로 열어 주세요.";
+  if (m === "SCRIPT_LOAD")
+    return "AI 라이브러리를 불러오지 못했습니다. 네트워크(광고 차단/사내 와이파이)를 확인하고 새로고침해 주세요.";
+  if (m === "TIMEOUT:model")
+    return "AI 모델 다운로드가 너무 오래 걸립니다. 와이파이/LTE 상태를 확인하고 '다시 시도'를 눌러 주세요.";
   if (n === "NotAllowedError" || n === "SecurityError")
-    return "카메라 권한이 거부되었습니다. 브라우저 설정에서 카메라를 허용해 주세요.";
+    return "카메라 권한이 거부되었습니다. 주소창 왼쪽 자물쇠 → 카메라 → 허용으로 바꾼 뒤 다시 시도해 주세요.";
   if (n === "NotFoundError" || n === "OverconstrainedError")
     return "사용 가능한 카메라를 찾지 못했습니다.";
+  if (n === "NotReadableError")
+    return "다른 앱이 카메라를 사용 중입니다. 카메라 앱을 모두 닫고 다시 시도해 주세요.";
   if (location.protocol !== "https:" && location.hostname !== "localhost")
     return "카메라는 HTTPS 주소에서만 동작합니다. (Vercel 주소로 접속하세요)";
-  return "오류가 발생했습니다: " + (err && err.message ? err.message : err);
+  return "오류가 발생했습니다: " + (m || err);
 }
 
 async function loop() {
