@@ -15,6 +15,7 @@
     --muted: #9aa7b8;
   }
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  [hidden] { display: none !important; }
   html, body {
     margin: 0; padding: 0; height: 100%;
     background: var(--bg); color: var(--text);
@@ -143,7 +144,7 @@
   <div class="spinner" id="startSpinner" hidden></div>
   <button class="primary" id="startBtn">카메라 시작</button>
   <p id="startErr" style="color:#ff6b6b" hidden></p>
-  <pre id="debug"></pre>
+  <pre id="debug" hidden></pre>
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.22.0/dist/tf.min.js"></script>

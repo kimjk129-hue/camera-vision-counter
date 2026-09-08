@@ -39,13 +39,19 @@ let facingMode = "environment"; // 후면 카메라부터
 let lastDetect = 0;
 let lastPredictions = [];
 
-// ---- 화면 진단 로그 ----
+// ---- 화면 진단 로그 (주소 끝에 ?debug 를 붙이거나 오류 발생 시 표시) ----
 const dbgEl = document.getElementById("debug");
+let dbgVisible = /[?&]debug/.test(location.search);
 function dbg(line) {
   const t = new Date().toLocaleTimeString();
-  if (dbgEl) dbgEl.textContent += `[${t}] ${line}\n`;
+  if (dbgEl) {
+    dbgEl.textContent += `[${t}] ${line}\n`;
+    dbgEl.hidden = !dbgVisible;
+    dbgEl.scrollTop = dbgEl.scrollHeight;
+  }
   console.log("[DBG]", line);
 }
+function showDebug() { dbgVisible = true; if (dbgEl) dbgEl.hidden = false; }
 window.addEventListener("error", (e) =>
   dbg("❌ JS 오류: " + (e.message || e.error) + (e.filename ? " @ " + e.filename : ""))
 );
@@ -164,6 +170,7 @@ async function begin() {
 
 function fail(err) {
   console.error(err);
+  showDebug();
   dbg("❌ 실패: " + (err && (err.message || err.name) ? err.message || err.name : err));
   startSpinner.hidden = true;
   startBtn.disabled = false;
