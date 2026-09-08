@@ -39,6 +39,24 @@ let facingMode = "environment"; // 후면 카메라부터
 let lastDetect = 0;
 let lastPredictions = [];
 
+// ---- 화면 진단 로그 ----
+const dbgEl = document.getElementById("debug");
+function dbg(line) {
+  const t = new Date().toLocaleTimeString();
+  if (dbgEl) dbgEl.textContent += `[${t}] ${line}\n`;
+  console.log("[DBG]", line);
+}
+window.addEventListener("error", (e) =>
+  dbg("❌ JS 오류: " + (e.message || e.error) + (e.filename ? " @ " + e.filename : ""))
+);
+window.addEventListener("unhandledrejection", (e) =>
+  dbg("❌ 처리안된 거부: " + (e.reason && e.reason.message ? e.reason.message : e.reason))
+);
+dbg("페이지 로드됨. UA=" + navigator.userAgent);
+dbg("보안컨텍스트(HTTPS): " + window.isSecureContext);
+dbg("tf 로드됨: " + (typeof tf !== "undefined") + " / coco-ssd 로드됨: " + (typeof cocoSsd !== "undefined"));
+dbg("getUserMedia 지원: " + !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia));
+
 function setStatus(text) {
   if (!text) { statusEl.classList.add("hidden"); return; }
   statusEl.textContent = text;
@@ -109,22 +127,30 @@ async function begin() {
   }
 
   try {
+    dbg("▶ 시작 버튼 클릭됨");
     setStatus("AI 모델 불러오는 중… (최초 1회, 최대 30초)");
     setStartMsg("AI 모델을 내려받는 중입니다…");
     if (typeof cocoSsd === "undefined" || typeof tf === "undefined") {
       throw new Error("SCRIPT_LOAD");
     }
+    dbg("tf 백엔드 준비 대기…");
+    await withTimeout(tf.ready(), 15000, "tfready");
+    dbg("tf 백엔드 = " + tf.getBackend());
     if (!model) {
+      dbg("모델 다운로드 시작 (lite_mobilenet_v2)…");
       model = await withTimeout(
         cocoSsd.load({ base: "lite_mobilenet_v2" }),
         30000,
         "model"
       );
+      dbg("✅ 모델 로드 완료");
     }
 
     setStatus("카메라 켜는 중…");
     setStartMsg("카메라 권한을 허용해 주세요…");
+    dbg("카메라 요청 (getUserMedia)…");
     await startCamera();
+    dbg("✅ 카메라 스트림 시작: " + overlay.width + "x" + overlay.height);
 
     startScreen.hidden = true;
     controlsEl.hidden = false;
@@ -138,6 +164,7 @@ async function begin() {
 
 function fail(err) {
   console.error(err);
+  dbg("❌ 실패: " + (err && (err.message || err.name) ? err.message || err.name : err));
   startSpinner.hidden = true;
   startBtn.disabled = false;
   startBtn.textContent = "다시 시도";
@@ -156,6 +183,8 @@ function errMessage(err) {
     return "AI 라이브러리를 불러오지 못했습니다. 네트워크(광고 차단/사내 와이파이)를 확인하고 새로고침해 주세요.";
   if (m === "TIMEOUT:model")
     return "AI 모델 다운로드가 너무 오래 걸립니다. 와이파이/LTE 상태를 확인하고 '다시 시도'를 눌러 주세요.";
+  if (m === "TIMEOUT:tfready")
+    return "그래픽 가속(WebGL) 초기화에 실패했습니다. 브라우저를 완전히 종료 후 다시 열거나 다른 브라우저로 시도해 주세요.";
   if (n === "NotAllowedError" || n === "SecurityError")
     return "카메라 권한이 거부되었습니다. 주소창 왼쪽 자물쇠 → 카메라 → 허용으로 바꾼 뒤 다시 시도해 주세요.";
   if (n === "NotFoundError" || n === "OverconstrainedError")

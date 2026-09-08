@@ -84,6 +84,16 @@
   }
   #start h1 { font-size: 24px; margin: 0; }
   #start p { color: var(--muted); margin: 0; max-width: 320px; line-height: 1.6; font-size: 14px; }
+  #debug {
+    width: min(92vw, 520px); max-height: 34vh; overflow: auto;
+    margin: 4px 0 0; padding: 10px 12px;
+    background: rgba(0,0,0,0.4); border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 10px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 11px; line-height: 1.5; color: #b8c4d4;
+    white-space: pre-wrap; word-break: break-all; text-align: left;
+  }
+  #debug:empty { display: none; }
   #status {
     position: fixed; left: 50%; transform: translateX(-50%);
     bottom: calc(env(safe-area-inset-bottom) + 84px);
@@ -133,6 +143,7 @@
   <div class="spinner" id="startSpinner" hidden></div>
   <button class="primary" id="startBtn">카메라 시작</button>
   <p id="startErr" style="color:#ff6b6b" hidden></p>
+  <pre id="debug"></pre>
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.22.0/dist/tf.min.js"></script>
